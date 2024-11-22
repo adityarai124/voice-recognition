@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GestureLearn</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      background-color: black;
+      height: 100vh;
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: white;
+    }
+
+    .container {
+      text-align: center;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 40px;
+      border-radius: 10px;
+      box-shadow: 0px 4px 30px rgba(0, 0, 0, 0.2);
+      width: 400px;
+      position: relative;
+    }
+
+    h1 {
+      margin-bottom: 20px;
+      font-size: 2.5rem;
+    }
+
+    textarea {
+      width: 100%;
+      height: 100px;
+      padding: 15px;
+      border-radius: 10px;
+      border: 1px solid black;
+      background-color: #b0b0b0;
+      font-size: 1rem;
+      resize: none;
+      margin-bottom: 20px;
+      transition: background-color 0.3s;
+    }
+
+    textarea:focus {
+      outline: none;
+      box-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+    }
+
+    button {
+      padding: 15px 30px;
+      font-size: 1.2rem;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+      margin: 10px;
+    }
+
+    button:hover {
+      background-color: #45a049;
+    }
+
+    button:focus {
+      outline: none;
+    }
+
+    .translation {
+      margin-top: 20px;
+      color: lightgrey;
+      font-size: 1rem;
+    }
+
+    .loading {
+      display: none;
+      font-size: 1rem;
+      color: lightgrey;
+      margin-top: 10px;
+    }
+
+    .listening {
+      background-color: #2e8b57;
+      color: white;
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 5px #4CAF50; }
+      50% { box-shadow: 0 0 20px #4CAF50; }
+      100% { box-shadow: 0 0 5px #4CAF50; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>GestureLearn</h1>
+    <textarea id="text-input" placeholder="Enter or speak text here..."></textarea>
+    <br>
+    <button id="voice-btn">Input through Voice</button>
+    <button id="speak-btn">Convert to Speech</button>
+    <button id="translate-btn">Translate</button>
+    <div class="translation" id="translation-output"></div>
+    <div class="loading" id="loading">Processing...</div>
+  </div>
+
+  <script>
+    let detectedLanguage = '';
+    let translatedText = '';
+    let recognition;
+
+    // Initialize speech recognition
+    if ('webkitSpeechRecognition' in window) {
+      recognition = new webkitSpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = function() {
+        document.getElementById('voice-btn').classList.add('listening');
+        document.getElementById('text-input').placeholder = 'Listening...';
+      };
+
+      recognition.onend = function() {
+        document.getElementById('voice-btn').classList.remove('listening');
+        document.getElementById('text-input').placeholder = 'Enter or speak text here...';
+      };
+
+      recognition.onresult = function(event) {
+        document.getElementById('text-input').value = event.results[0][0].transcript;
+      };
+
+      recognition.onerror = function(event) {
+        if (event.error === 'no-speech') {
+          alert('No speech detected. Please try speaking again.');
+        } else if (event.error === 'audio-capture') {
+          alert('Microphone not found. Please check your microphone settings.');
+        } else {
+          alert('Speech recognition error: ' + event.error);
+        }
+        document.getElementById('voice-btn').classList.remove('listening');
+      };
+    } else {
+      alert('Speech recognition is not supported in this browser. Try using Chrome.');
+    }
+
+    // Start voice input on button click
+    document.getElementById('voice-btn').addEventListener('click', function() {
+      recognition.start();
+    });
+
+    // Function to speak the text
+    function speakText(text, language) {
+      let speech = new SpeechSynthesisUtterance(text);
+      speech.lang = language;
+      window.speechSynthesis.speak(speech);
+    }
+
+    // Function to detect language
+    async function detectLanguage(text) {
+      try {
+        let response = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${encodeURIComponent(text)}`);
+        let data = await response.json();
+        detectedLanguage = data[2];
+        return detectedLanguage;
+      } catch (error) {
+        console.error('Error detecting language:', error);
+        return null;
+      }
+    }
+
+    // Convert directly entered text to speech based on detected language
+    document.getElementById('speak-btn').addEventListener('click', async function() {
+      let text = document.getElementById('text-input').value;
+
+      if (text !== '') {
+        if (!detectedLanguage) {
+          detectedLanguage = await detectLanguage(text);
+        }
+
+        let langCode = detectedLanguage === 'hi' ? 'hi-IN' : 'en-US';
+        speakText(text, langCode);
+      } else {
+        alert("Please enter some text to convert!");
+      }
+    });
+
+    // Translate the entered text and then speak the translated result
+    document.getElementById('translate-btn').addEventListener('click', async function() {
+      let text = document.getElementById('text-input').value;
+      let loadingDiv = document.getElementById('loading');
+
+      if (text !== '') {
+        loadingDiv.style.display = 'block'; // Show loading indicator
+
+        detectedLanguage = await detectLanguage(text);
+        let langPair = detectedLanguage === 'en' ? 'en-hi' : 'hi-en';
+        let targetLang = detectedLanguage === 'en' ? 'hi' : 'en';
+
+        try {
+          let response = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=${detectedLanguage}&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`);
+          let data = await response.json();
+          translatedText = data[0][0][0];
+          document.getElementById('translation-output').textContent = `Translated: ${translatedText}`;
+
+          let speakLangCode = targetLang === 'hi' ? 'hi-IN' : 'en-US';
+          speakText(translatedText, speakLangCode);
+        } catch (error) {
+          console.error('Error translating text:', error);
+        } finally {
+          loadingDiv.style.display = 'none'; // Hide loading indicator
+        }
+      } else {
+        alert("Please enter some text to translate!");
+      }
+    });
+  </script>
+</body>
+</html>
